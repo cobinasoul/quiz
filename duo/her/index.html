@@ -122,6 +122,49 @@ function pick(i,a){
   ov.onclick=go; document.getElementById('mirrorNext').onclick=go;
 }
 function getTopKey(o){return Object.keys(o).sort(function(a,c){return o[c]-o[a];})[0];}
+// ── Режим "Для пар": код приглашения из URL ────────────────────────────────
+const API_BASE = 'https://YOUR-NGROK-URL.ngrok-free.app'; // TODO: подставить актуальный URL
+const urlParams = new URLSearchParams(location.search);
+const inviteCode = urlParams.get('code');
+
+// квиз использует старые ключи блока 5 (drifter), бэкенд — новые (freedom)
+const FUTURE_MAP = { builder: 'builder', drifter: 'freedom', solo: 'solo', partner: 'partner' };
+
+function buildProfile(res, name){
+  const get = n => res.find(function(r){ return r.n === n; });
+  const secondary_types = {};
+  [1,3,4,5,6].forEach(function(n){
+    const r = get(n);
+    if(r && r.secondary){
+      secondary_types[n] = (n === 5) ? (FUTURE_MAP[r.secondary] || r.secondary) : r.secondary;
+    }
+  });
+  return {
+    name: name,
+    attachment_type: get(1).primary,
+    love_lang_give: get(2).give,
+    love_lang_receive: get(2).receive,
+    love_lang_spectrum: {},
+    values_profile: get(3).primary,
+    eq_type: get(4).primary,
+    future_type: FUTURE_MAP[get(5).primary] || get(5).primary,
+    intimacy_type: get(6).primary,
+    secondary_types: secondary_types,
+    raw_answers: answers
+  };
+}
+
+function sendCoupleResult(res, name){
+  if(!inviteCode) return; // обычный квиз без кода — ничего не отправляем
+  fetch(API_BASE + '/couples/anon-result', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code: inviteCode, profile: buildProfile(res, name) })
+  }).then(function(r){ return r.json(); })
+    .then(function(d){ console.log('couple result sent:', d); })
+    .catch(function(e){ console.log('couple send error:', e); });
+}
+
 function computeBlock(b){
   const keys=DATA.KEYS[b.n];
   if(b.n===2){
@@ -140,6 +183,7 @@ function finish(){
   const res=DATA.blocks.map(computeBlock);
   const nm=document.getElementById('userName').value.trim();
   document.getElementById('resTitle').textContent=nm?nm+' — твоё зеркало':'Твоё зеркало';
+  sendCoupleResult(res, nm);
   renderBody(res); renderCards(res); screen('results');
 }
 function renderBody(res){
